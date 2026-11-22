@@ -1,10 +1,12 @@
 from .base import Signal, Strategy
+from .breakout import Breakout
 from .rsi import RSIMeanReversion
 from .sma_cross import SMACrossover
 
 STRATEGIES = {
     "sma_cross": SMACrossover,
     "rsi": RSIMeanReversion,
+    "breakout": Breakout,
 }
 
 
@@ -15,4 +17,4 @@ def get_strategy(name: str, **params) -> Strategy:
         raise ValueError(f"Unknown strategy '{name}'. Choose from: {', '.join(STRATEGIES)}") from None
 
 
-__all__ = ["Signal", "Strategy", "SMACrossover", "RSIMeanReversion", "STRATEGIES", "get_strategy"]
+__all__ = ["Signal", "Strategy", "SMACrossover", "RSIMeanReversion", "Breakout", "STRATEGIES", "get_strategy"]

@@ -8,7 +8,7 @@ A small, modular trading bot in Python. You can backtest it, paper-trade it, and
 
 ## Features
 
-- **Strategies**: SMA crossover (`sma_cross`) and RSI mean reversion (`rsi`). Add your own by subclassing `Strategy`.
+- **Strategies**: SMA crossover (`sma_cross`), RSI mean reversion (`rsi`) and Donchian breakout (`breakout`). Add your own by subclassing `Strategy`.
 - **Risk management**: sizes each position so that a stop-out loses a fixed share of equity, caps position size, sets stop-loss and take-profit levels, and stops opening new positions after a set drawdown.
 - **Backtester**: signals fire on a bar's close and fill at the next bar's open, so there is no look-ahead. It models fees and slippage, fills at the open when price gaps through a stop, and reports total return, CAGR, Sharpe, max drawdown, win rate and profit factor.
 - **Paper trading**: replays CSV or synthetic data, or reads live exchange prices while simulating the fills.
@@ -24,6 +24,7 @@ pip install -r requirements.txt
 # Backtest on synthetic data
 python -m tradingbot backtest
 python -m tradingbot backtest --strategy rsi --param period=14 --param oversold=25 --trades
+python -m tradingbot backtest --strategy breakout --param entry=20 --param exit=10
 
 # Backtest on your own data (CSV columns: date/timestamp, open, high, low, close, volume)
 python -m tradingbot backtest --source csv --csv prices.csv --plot equity.png
@@ -70,24 +71,31 @@ The bot is **long-only** and trades one symbol at a time. Use API keys with trad
 | `--max-drawdown` | 0.25 | Stop opening positions after this drop from peak equity (0 turns it off) |
 | `--fee` / `--slippage` | 0.001 / 0.0005 | Simulated costs |
 
+## Strategies
+
+| Name | Buys when | Sells when | Parameters (defaults) |
+|---|---|---|---|
+| `sma_cross` | fast SMA crosses above slow SMA | fast crosses below slow | `fast=20 slow=50` |
+| `rsi` | RSI rises back above `oversold` | RSI falls back below `overbought` | `period=14 oversold=30 overbought=70` |
+| `breakout` | close beats the highest high of the last `entry` bars | close falls under the lowest low of the last `exit` bars | `entry=20 exit=10` |
+
 ## Writing a strategy
 
 ```python
 from tradingbot.strategies import Signal, Strategy, STRATEGIES
 
-class Breakout(Strategy):
-    name = "breakout"
-    def __init__(self, lookback=20): self.lookback = lookback
+class Momentum(Strategy):
+    name = "momentum"
+    def __init__(self, lookback=10): self.lookback = lookback
     @property
     def warmup(self): return self.lookback + 1
     def generate_signals(self, data):
-        hi = data["high"].rolling(self.lookback).max().shift(1)
-        lo = data["low"].rolling(self.lookback).min().shift(1)
-        s = (data["close"] > hi).astype(int) * Signal.BUY
-        s[data["close"] < lo] = Signal.SELL
+        change = data["close"].pct_change(self.lookback)
+        s = (change > 0.05).astype(int) * Signal.BUY
+        s[change < -0.05] = Signal.SELL
         return s
 
-STRATEGIES["breakout"] = Breakout
+STRATEGIES["momentum"] = Momentum
 ```
 
 Rule: a bar's signal may use only data up to and including that bar. `tests/test_tradingbot.py` checks this for the bundled strategies.
@@ -97,7 +105,7 @@ Rule: a bar's signal may use only data up to and including that bar. `tests/test
 ```
 tradingbot/
   data.py        CSV / synthetic / ccxt data
-  strategies/    Strategy base + SMA crossover + RSI
+  strategies/    Strategy base + SMA crossover, RSI, breakout
   risk.py        position sizing, stops, drawdown halt
   broker.py      PaperBroker (simulated), CCXTBroker (real orders)
   backtest.py    event-driven backtester + metrics

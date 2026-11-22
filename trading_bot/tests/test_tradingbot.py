@@ -7,7 +7,7 @@ from tradingbot.bot import TradingBot
 from tradingbot.broker import PaperBroker
 from tradingbot.data import synthetic
 from tradingbot.risk import RiskManager
-from tradingbot.strategies import RSIMeanReversion, Signal, SMACrossover, get_strategy
+from tradingbot.strategies import Breakout, RSIMeanReversion, Signal, SMACrossover, get_strategy
 from tradingbot.strategies.rsi import rsi
 
 
@@ -26,7 +26,7 @@ def test_sma_cross_signals_on_crossovers():
 
 def test_strategies_have_no_lookahead():
     df = synthetic(400, seed=1)
-    for strat in (SMACrossover(5, 20), RSIMeanReversion()):
+    for strat in (SMACrossover(5, 20), RSIMeanReversion(), Breakout(20, 10)):
         full = strat.generate_signals(df)
         for n in (100, 250, 399):
             assert full.iloc[n - 1] == strat.generate_signals(df.iloc[:n]).iloc[-1]
@@ -131,3 +131,14 @@ def test_run_survives_feed_errors():
     bot = TradingBot(SMACrossover(2, 4), PaperBroker(1000))
     bot.run(flaky_feed, interval=0, max_steps=3)
     assert calls["n"] == 3
+
+
+def test_breakout_signals():
+    df = frame([10] * 6 + [12] + [11] * 3 + [8])
+    sig = Breakout(entry=5, exit=3).generate_signals(df)
+    assert sig.iloc[6] == Signal.BUY          # 12 breaks the prior 5-bar high of 10
+    assert (sig.iloc[7:10] == Signal.HOLD).all()
+    assert sig.iloc[10] == Signal.SELL        # 8 breaks the prior 3-bar low of 11
+    assert (sig.iloc[:6] == Signal.HOLD).all()  # no signals during warmup or flat prices
+    with pytest.raises(ValueError):
+        Breakout(entry=1)
