@@ -1,0 +1,94 @@
+# Trading Bot
+
+A small, modular trading bot in Python. You can backtest it, paper-trade it, and, if you choose to, connect it to a crypto exchange through [ccxt](https://github.com/ccxt/ccxt).
+
+> ⚠️ **Disclaimer.** This is educational software, not financial advice. The bundled strategies are simple
+> textbook examples with **no proven edge**. Backtests on synthetic data mean nothing about real markets.
+> Never trade money you can't afford to lose.
+
+## Features
+
+- **Strategies**: SMA crossover (`sma_cross`) and RSI mean reversion (`rsi`). Add your own by subclassing `Strategy`.
+- **Risk management**: sizes each position so that a stop-out loses a fixed share of equity, caps position size, sets stop-loss and take-profit levels, and stops opening new positions after a set drawdown.
+- **Backtester**: signals fire on a bar's close and fill at the next bar's open, so there is no look-ahead. It models fees and slippage, fills at the open when price gaps through a stop, and reports total return, CAGR, Sharpe, max drawdown, win rate and profit factor.
+- **Paper trading**: replays CSV or synthetic data, or reads live exchange prices while simulating the fills.
+- **Live trading** (opt-in): market orders through ccxt. It uses the exchange testnet by default and needs explicit flags before it touches real funds.
+- **Restart-safe**: entry price and drawdown peak are saved to a JSON state file.
+
+## Quick start
+
+```bash
+cd trading_bot
+pip install -r requirements.txt
+
+# Backtest on synthetic data
+python -m tradingbot backtest
+python -m tradingbot backtest --strategy rsi --param period=14 --param oversold=25 --trades
+
+# Backtest on your own data (CSV columns: date/timestamp, open, high, low, close, volume)
+python -m tradingbot backtest --source csv --csv prices.csv --plot equity.png
+
+# Backtest on real exchange candles (pip install ccxt)
+python -m tradingbot backtest --source ccxt --exchange binance --symbol BTC/USDT --timeframe 1h --bars 1000
+
+# Paper trade: replay synthetic bars quickly, or follow live prices every 60 s
+python -m tradingbot paper -v
+python -m tradingbot paper --source ccxt --symbol ETH/USDT --timeframe 15m --interval 60 -v
+```
+
+### Live trading
+
+```bash
+export EXCHANGE_API_KEY=...  EXCHANGE_API_SECRET=...
+python -m tradingbot live --source ccxt --exchange binance --symbol BTC/USDT -v          # testnet
+python -m tradingbot live --source ccxt ... --no-sandbox --yes-i-understand              # REAL money
+```
+
+The bot is **long-only** and trades one symbol at a time. Use API keys with trading permission only, never withdrawal permission.
+
+## Risk options
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--risk-per-trade` | 0.02 | Share of equity lost if the stop is hit |
+| `--max-position` | 0.95 | Largest position, as a share of equity |
+| `--stop-loss` | 0.05 | Stop distance below entry (0 turns it off) |
+| `--take-profit` | 0.10 | Target distance above entry (0 turns it off) |
+| `--max-drawdown` | 0.25 | Stop opening positions after this drop from peak equity (0 turns it off) |
+| `--fee` / `--slippage` | 0.001 / 0.0005 | Simulated costs |
+
+## Writing a strategy
+
+```python
+from tradingbot.strategies import Signal, Strategy, STRATEGIES
+
+class Breakout(Strategy):
+    name = "breakout"
+    def __init__(self, lookback=20): self.lookback = lookback
+    @property
+    def warmup(self): return self.lookback + 1
+    def generate_signals(self, data):
+        hi = data["high"].rolling(self.lookback).max().shift(1)
+        lo = data["low"].rolling(self.lookback).min().shift(1)
+        s = (data["close"] > hi).astype(int) * Signal.BUY
+        s[data["close"] < lo] = Signal.SELL
+        return s
+
+STRATEGIES["breakout"] = Breakout
+```
+
+Rule: a bar's signal may use only data up to and including that bar. `tests/test_tradingbot.py` checks this for the bundled strategies.
+
+## Layout
+
+```
+tradingbot/
+  data.py        CSV / synthetic / ccxt data
+  strategies/    Strategy base + SMA crossover + RSI
+  risk.py        position sizing, stops, drawdown halt
+  broker.py      PaperBroker (simulated), CCXTBroker (real orders)
+  backtest.py    event-driven backtester + metrics
+  bot.py         polling trading loop
+  cli.py         command-line interface
+tests/           pytest suite (`python -m pytest tests`)
+```
