@@ -101,3 +101,33 @@ def test_get_strategy_errors():
         get_strategy("nope")
     with pytest.raises(ValueError):
         SMACrossover(50, 20)
+
+
+def test_paper_balances_survive_restart(tmp_path):
+    class AlwaysBuy(SMACrossover):
+        def latest_signal(self, data):
+            return Signal.BUY
+
+    state = str(tmp_path / "s.json")
+    broker = PaperBroker(1000, 0, 0)
+    TradingBot(AlwaysBuy(2, 4), broker, state_file=state).step(frame([100] * 10))
+    restored = PaperBroker(1000, 0, 0)
+    bot = TradingBot(AlwaysBuy(2, 4), restored, state_file=state)
+    assert broker.position > 0
+    assert restored.position == pytest.approx(broker.position)
+    assert restored.cash == pytest.approx(broker.cash)
+    assert bot.entry_price == pytest.approx(100)
+
+
+def test_run_survives_feed_errors():
+    calls = {"n": 0}
+
+    def flaky_feed():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("network down")
+        return frame([100] * 10), 100.0
+
+    bot = TradingBot(SMACrossover(2, 4), PaperBroker(1000))
+    bot.run(flaky_feed, interval=0, max_steps=3)
+    assert calls["n"] == 3

@@ -36,6 +36,19 @@ python -m tradingbot paper -v
 python -m tradingbot paper --source ccxt --symbol ETH/USDT --timeframe 15m --interval 60 -v
 ```
 
+### Practising with paper trading on live prices
+
+Paper mode reads real prices from a public exchange feed but simulates every order, so it needs no account and no API keys.
+
+```bash
+pip install ccxt
+python -m tradingbot paper --source ccxt --exchange kraken --symbol BTC/USD --timeframe 5m --interval 60 -v
+```
+
+- Short timeframes (`1m`, `5m`) produce trades sooner, because the bot acts once per closed candle.
+- Press Ctrl+C to stop. Cash, position and entry price are saved to `.tradingbot_paper_state.json`, and running the same command again picks up where you left off. Delete that file to start over with fresh cash.
+- Binance blocks some countries, including the US. If you get a network error, try `--exchange kraken` or `--exchange coinbase` with a `/USD` pair.
+
 ### Live trading
 
 ```bash

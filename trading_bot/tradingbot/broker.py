@@ -55,6 +55,13 @@ class PaperBroker(Broker):
     def cash(self) -> float:
         return self._cash
 
+    def get_state(self) -> dict:
+        return {"cash": self._cash, "position": self._position}
+
+    def set_state(self, state: dict) -> None:
+        self._cash = float(state["cash"])
+        self._position = float(state["position"])
+
     @property
     def position(self) -> float:
         return self._position

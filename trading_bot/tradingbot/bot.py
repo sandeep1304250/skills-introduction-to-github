@@ -35,12 +35,17 @@ class TradingBot:
                 s = json.load(f)
             self.entry_price, self.peak_equity = s.get("entry_price"), s.get("peak_equity")
             self.last_bar = s.get("last_bar")
+            # Simulated balances live only in memory, so restore them; a real broker reports its own.
+            if s.get("broker") and hasattr(self.broker, "set_state"):
+                self.broker.set_state(s["broker"])
 
     def _save_state(self):
         if self.state_file:
+            state = {"entry_price": self.entry_price, "peak_equity": self.peak_equity, "last_bar": self.last_bar}
+            if hasattr(self.broker, "get_state"):
+                state["broker"] = self.broker.get_state()
             with open(self.state_file, "w") as f:
-                json.dump({"entry_price": self.entry_price, "peak_equity": self.peak_equity,
-                           "last_bar": self.last_bar}, f)
+                json.dump(state, f)
 
     def step(self, data: pd.DataFrame, price: float | None = None) -> str:
         """Process one update. `data` must contain only closed bars; `price` is the
@@ -91,13 +96,13 @@ class TradingBot:
         steps = 0
         try:
             while max_steps is None or steps < max_steps:
-                got = feed()
-                if got is None:
-                    break
                 try:
+                    got = feed()
+                    if got is None:
+                        break
                     self.step(*got)
-                except Exception:  # keep the loop alive on transient errors
-                    log.exception("step failed")
+                except Exception:  # keep the loop alive on transient errors (e.g. network)
+                    log.exception("update failed; retrying next interval")
                 steps += 1
                 if interval > 0:
                     _time.sleep(interval)
