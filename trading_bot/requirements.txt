@@ -1,0 +1,6 @@
+numpy>=1.24
+pandas>=2.0
+# Optional:
+# ccxt>=4.0        # live exchange data and real orders
+# matplotlib>=3.7  # --plot equity curves
+# pytest>=7        # tests

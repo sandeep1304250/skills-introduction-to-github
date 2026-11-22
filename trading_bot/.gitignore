@@ -1,0 +1,5 @@
+.tradingbot_*_state.json
+__pycache__/
+.pytest_cache/
+*.png
+.env
